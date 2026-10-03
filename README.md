@@ -11,6 +11,8 @@ python vcard_reader.py [file.vcf]
 
 You can also drop `.vcf` files or folders onto the window.
 
+![vCard Reader showing a contact](docs/screenshots/shot1.png)
+
 ## Test
 
 ```text
