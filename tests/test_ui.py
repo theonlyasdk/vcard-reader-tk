@@ -39,6 +39,14 @@ END:VCARD
 
 class TestMainWindow(unittest.TestCase):
     def setUp(self):
+        import os
+        import tempfile
+        self._state_tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._state_tmp.cleanup)
+        self._prev_state = os.environ.get("VCARD_READER_STATE")
+        os.environ["VCARD_READER_STATE"] = str(
+            Path(self._state_tmp.name) / "state.json")
+        self.addCleanup(self._restore_state_env)
         try:
             self.app = MainWindow()
         except tk.TclError as exc:
@@ -63,6 +71,13 @@ class TestMainWindow(unittest.TestCase):
             self.app.root.destroy()
         except tk.TclError:
             pass
+
+    def _restore_state_env(self):
+        import os
+        if self._prev_state is None:
+            os.environ.pop("VCARD_READER_STATE", None)
+        else:
+            os.environ["VCARD_READER_STATE"] = self._prev_state
 
     def _write_vcf(self, name, text):
         import tempfile
@@ -194,6 +209,10 @@ class TestMainWindow(unittest.TestCase):
             self.app.edit_menu.entrycget("Copy details", "state"), "disabled")
 
     def test_action_states_disabled_without_file(self):
+        import os
+        from pathlib import Path as _Path
+        # setUp already saved a recent file; clear it so this starts empty.
+        _Path(os.environ["VCARD_READER_STATE"]).unlink(missing_ok=True)
         try:
             fresh = MainWindow()
         except tk.TclError as exc:
@@ -242,6 +261,40 @@ class TestMainWindow(unittest.TestCase):
         self.app._on_list_drag(SimpleNamespace(y=-10 ** 6))
         self.app._cancel_drag_scroll()
         self.assertLess(self.app.tree.yview()[0], scrolled)
+
+    def test_enter_copies_details(self):
+        self.app._on_enter()
+        self.assertIn("Amy Beta", self.app.root.clipboard_get())
+
+    def test_copy_as_vcard(self):
+        self.app._copy_vcard()
+        text = self.app.root.clipboard_get()
+        self.assertIn("BEGIN:VCARD", text)
+        self.assertIn("Amy Beta", text)
+
+    def test_status_shows_counts(self):
+        self.assertIn("1 phone", self.app.status_right.cget("text"))
+        self.assertIn("1 email", self.app.status_right.cget("text"))
+
+    def test_zoom_changes_detail_size(self):
+        before = self.app.detail_font.cget("size")
+        self.app._zoom(1)
+        self.assertEqual(self.app.detail_font.cget("size"), before + 1)
+        for _ in range(30):
+            self.app._zoom(-1)
+        self.assertGreaterEqual(self.app.detail_font.cget("size"), 8)
+
+    def test_details_show_version_and_source(self):
+        self.app.load_file(str(DATA / "vcard30.vcf"))
+        details = self.details()
+        self.assertIn("vCard 3.0", details)
+        self.assertIn("vcard30.vcf", details)
+
+    def test_recent_menu_updated_on_load(self):
+        menu = self.app.recent_menu
+        names = [menu.entrycget(i, "label")
+                 for i in range(menu.index(tk.END) + 1)]
+        self.assertTrue(any("in.vcf" in label for label in names))
 
     def test_export_all(self):
         out = self._write_vcf("out-all.vcf", "")

@@ -93,6 +93,33 @@ class TestSort(unittest.TestCase):
         self.assertEqual(self.names(result),
                          ["Amy Beta", "Zed Alpha", "Max NoMail"])
 
+    def test_first_name(self):
+        contacts = parse_vcards("\n".join([
+            "BEGIN:VCARD", "VERSION:3.0", "N:Alpha;Zed;;;",
+            "FN:Zed Alpha", "END:VCARD",
+            "BEGIN:VCARD", "VERSION:3.0", "FN:No N Here", "END:VCARD",
+            "BEGIN:VCARD", "VERSION:3.0", "N:Beta;Amy;;;",
+            "FN:Amy Beta", "END:VCARD",
+        ]))
+        self.assertEqual(self.names(sort_contacts(contacts, "First name")),
+                         ["Amy Beta", "Zed Alpha", "No N Here"])
+
+    def test_last_name(self):
+        contacts = parse_vcards("\n".join([
+            "BEGIN:VCARD", "VERSION:3.0", "N:Alpha;Zed;;;",
+            "FN:Zed Alpha", "END:VCARD",
+            "BEGIN:VCARD", "VERSION:3.0", "FN:No N Here", "END:VCARD",
+            "BEGIN:VCARD", "VERSION:3.0", "N:Beta;Amy;;;",
+            "FN:Amy Beta", "END:VCARD",
+        ]))
+        self.assertEqual(self.names(sort_contacts(contacts, "Last name")),
+                         ["Zed Alpha", "Amy Beta", "No N Here"])
+
+    def test_query_matches_type_label(self):
+        contacts = parse_vcards(
+            "BEGIN:VCARD\nVERSION:3.0\nFN:Cell Guy\nTEL;TYPE=CELL:555\nEND:VCARD\n")
+        self.assertEqual(len(filter_contacts(contacts, "cell")), 1)
+        self.assertEqual(filter_contacts(contacts, "home"), [])
     def test_unknown_sort_defaults_to_name(self):
         self.assertEqual(self.names(sort_contacts(self.contacts, "Bogus")),
                          ["Amy Beta", "Max NoMail", "Zed Alpha"])

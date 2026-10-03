@@ -35,14 +35,16 @@ A tkinter GUI vCard (.vcf) reader. Non-production software.
   src/core/ -> non-UI logic: vcard.py (stdlib-only vCard 2.1/3.0/4.0 parser
                incl. quoted-printable and NUL stripping, Contact dataclass,
                parse_file / parse_vcards, Issue diagnostics),
-               query.py (pure filter_contacts / sort_contacts).
+               query.py (pure filter_contacts / sort_contacts),
+               state.py (JSON recent files / last dir, never raises).
   src/ui/ -> tkinter widgets; main_window.py (two-pane list + details,
              search, filter/sort dropdowns, right-click menu, drag-select,
              click-to-copy details, multi-file open, Explorer drag-drop,
-             menu bar, status bar), dpi.py, file_drop.py (WM_DROPFILES).
+             recent files, details zoom, menu bar, status bar),
+             dpi.py, file_drop.py (WM_DROPFILES, queue+poll).
   tests/ -> stdlib unittest: test_vcard.py, test_query.py, test_ui.py,
              test_fixtures.py (version fixtures in tests/data/),
-             test_filedrop.py (synthetic WM_DROPFILES).
+             test_filedrop.py (synthetic WM_DROPFILES), test_state.py.
              Run with: python -m unittest discover.
   requirements.txt -> lists only tkinter. There are no third-party dependencies.
 

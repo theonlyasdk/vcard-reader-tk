@@ -6,10 +6,13 @@ from tkinter import filedialog, font, messagebox, ttk
 from pathlib import Path
 
 from core import (
+    MAX_RECENT,
     TYPE_FILTERS,
     SORT_OPTIONS,
     filter_contacts,
+    load_state,
     parse_file_with_issues,
+    save_state,
     sort_contacts,
 )
 from .dpi import setup_window_dpi
@@ -46,6 +49,7 @@ class MainWindow:
         self.sort_var = tk.StringVar(value=SORT_OPTIONS[0])
         self._search_after = None
         self._drag_scroll_job = None
+        self.state = load_state()
 
         self._create_menu()
         self._create_toolbar()
@@ -55,7 +59,12 @@ class MainWindow:
         self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
 
         if initial_file:
-            self.load_file(initial_file)
+            startup = [initial_file]
+        else:
+            startup = [p for p in self.state.get("recent", [])
+                       if Path(p).is_file()]
+        if startup:
+            self.load_files(startup)
         else:
             self._render_list()
             self._show_empty()
@@ -76,6 +85,7 @@ class MainWindow:
         self.f_section = _light(11)
         self.f_body = ("Segoe UI", 10)
         self.f_small = ("Segoe UI", 8)
+        self.detail_font = font.Font(family="Segoe UI", size=10)
         try:
             self.root.option_add("*Font", self.f_body)
         except Exception:
@@ -91,6 +101,8 @@ class MainWindow:
         menubar.add_cascade(label="File", menu=file_menu)
         self.file_menu = file_menu
         file_menu.add_command(label="Open…", accelerator="Ctrl+O", command=self._open_dialog)
+        self.recent_menu = tk.Menu(file_menu, tearoff=0)
+        file_menu.add_cascade(label="Open recent", menu=self.recent_menu)
         file_menu.add_command(label="Reload", accelerator="F5", command=self._reload)
         file_menu.add_command(label="Export selected…", accelerator="Ctrl+S",
                               command=self._export_selected)
@@ -103,6 +115,7 @@ class MainWindow:
         self.edit_menu = edit_menu
         edit_menu.add_command(label="Copy details", accelerator="Ctrl+C",
                               command=self._copy_details)
+        edit_menu.add_command(label="Copy as vCard", command=self._copy_vcard)
         edit_menu.add_command(label="Copy phone", command=self._copy_phone)
         edit_menu.add_command(label="Copy email", command=self._copy_email)
         edit_menu.add_separator()
@@ -123,7 +136,11 @@ class MainWindow:
         self.root.bind_all("<Control-a>", self._on_ctrl_a)
         self.root.bind_all("<Control-c>", self._on_ctrl_c)
         self.root.bind_all("<Control-f>", self._on_ctrl_f)
+        self.root.bind_all("<Control-plus>", lambda e: self._zoom(1))
+        self.root.bind_all("<Control-equal>", lambda e: self._zoom(1))
+        self.root.bind_all("<Control-minus>", lambda e: self._zoom(-1))
         self.root.bind_all("<F5>", lambda e: self._reload())
+        self._rebuild_recent()
 
     def _rebuild_sort_menu(self):
         self.view_menu.delete(0, tk.END)
@@ -205,6 +222,7 @@ class MainWindow:
         self.tree.bind("<Button-3>", self._on_list_right_click)
         self.tree.bind("<B1-Motion>", self._on_list_drag)
         self.tree.bind("<ButtonRelease-1>", self._cancel_drag_scroll)
+        self.tree.bind("<Return>", self._on_enter)
         self.tree.tag_configure("stripe", background="#f0f4f8")
 
         right = ttk.Frame(paned, padding=(12, 4, 4, 0))
@@ -212,7 +230,7 @@ class MainWindow:
 
         self.details = tk.Text(right, wrap=tk.WORD, relief=tk.FLAT,
                                padx=4, pady=4, state=tk.DISABLED,
-                               font=self.f_body)
+                               font=self.detail_font)
         detail_scroll = ttk.Scrollbar(right, orient=tk.VERTICAL,
                                       command=self.details.yview)
         self.details.configure(yscrollcommand=detail_scroll.set)
@@ -225,8 +243,8 @@ class MainWindow:
                                    foreground="#444444", spacing1=10, spacing3=2)
         self.details.tag_configure("label", font=("Segoe UI", 9),
                                    foreground="#777777")
-        self.details.tag_configure("value", font=self.f_body)
-        self.details.tag_configure("dim", font=self.f_body, foreground="#666666")
+        self.details.tag_configure("value", font=self.detail_font)
+        self.details.tag_configure("dim", font=self.detail_font, foreground="#666666")
 
     # ----- status bar -----
 
@@ -285,9 +303,37 @@ class MainWindow:
         except Exception as exc:
             self._set_status(f"Drop failed: {exc}")
 
+    def _dialog_dir(self):
+        last = self.state.get("last_dir", "")
+        return last if last and Path(last).is_dir() else None
+
+    def _remember_dir(self, path):
+        self._save_state(last_dir=str(Path(path).parent))
+
+    def _save_state(self, recent=None, last_dir=None):
+        if recent is None:
+            recent = self.state.get("recent", [])
+        if last_dir is None:
+            last_dir = self.state.get("last_dir", "")
+        self.state = {"recent": recent, "last_dir": last_dir}
+        save_state(recent, last_dir)
+
+    def _rebuild_recent(self):
+        menu = self.recent_menu
+        menu.delete(0, tk.END)
+        recent = [p for p in self.state.get("recent", [])[:MAX_RECENT]
+                  if Path(p).is_file()]
+        if not recent:
+            menu.add_command(label="(Empty)", state=tk.DISABLED)
+            return
+        for path in recent:
+            menu.add_command(label=Path(path).name,
+                             command=lambda p=path: self.load_files([p]))
+
     def _open_dialog(self):
         paths = filedialog.askopenfilenames(
             title="Open vCard file",
+            initialdir=self._dialog_dir(),
             filetypes=[("vCard", "*.vcf *.vcard"), ("All files", "*.*")])
         if paths:
             self.load_files(paths)
@@ -315,6 +361,11 @@ class MainWindow:
         self.current_files = paths
         self.selected = None
         self.apply_filter()
+        fresh = [p for p in paths if Path(p).is_file()]
+        recent = fresh + [p for p in self.state.get("recent", []) if p not in fresh]
+        self._save_state(recent[:MAX_RECENT],
+                         str(Path(paths[0]).parent) if paths else "")
+        self._rebuild_recent()
         if not failed and problems:
             loaded = len(contacts)
             intro = (f"Loaded {loaded} contact(s), but found "
@@ -410,8 +461,22 @@ class MainWindow:
         self.file_menu.entryconfig(
             "Export all…", state=tk.NORMAL if self.filtered else tk.DISABLED)
         self.edit_menu.entryconfig("Copy details", state=sel_state)
+        self.edit_menu.entryconfig("Copy as vCard", state=sel_state)
         self.edit_menu.entryconfig("Copy phone", state=sel_state)
         self.edit_menu.entryconfig("Copy email", state=sel_state)
+
+    @staticmethod
+    def _counts_text(contact):
+        bits = []
+        n = len(contact.phones)
+        if n:
+            bits.append(f"{n} phone" if n == 1 else f"{n} phones")
+        n = len(contact.emails)
+        if n:
+            bits.append(f"{n} email" if n == 1 else f"{n} emails")
+        if not bits:
+            return contact.display_name
+        return f"{contact.display_name} · {' · '.join(bits)}"
 
     def _on_select(self, _event=None):
         selection = self.tree.selection()
@@ -422,7 +487,7 @@ class MainWindow:
             if self._iid(contact) == iid:
                 self.selected = contact
                 self._show_details(contact)
-                self._set_status(right=contact.display_name)
+                self._set_status(right=self._counts_text(contact))
                 self._update_action_states()
                 return
 
@@ -479,6 +544,7 @@ class MainWindow:
         contact = self.selected
         if contact is not None:
             menu.add_command(label="Copy details", command=self._copy_details)
+            menu.add_command(label="Copy as vCard", command=self._copy_vcard)
             if len(contact.phones) == 1:
                 menu.add_command(label=f"Copy {contact.phones[0][1]}",
                                  command=self._copy_phone)
@@ -588,6 +654,13 @@ class MainWindow:
         if contact.note:
             self._write("Note\n", "section")
             self._write(contact.note + "\n", "value")
+        source_bits = []
+        if contact.source:
+            source_bits.append(Path(contact.source).name)
+        if contact.version:
+            source_bits.append(f"vCard {contact.version}")
+        if source_bits:
+            self._write("\n" + " · ".join(source_bits), "dim")
         self.details.configure(state=tk.DISABLED)
 
     # ----- actions -----
@@ -615,12 +688,20 @@ class MainWindow:
         self.tree.focus_set()
         return "break"
 
+    def _on_enter(self, _event=None):
+        self._copy_details()
+
+    def _zoom(self, step):
+        size = min(20, max(8, self.detail_font.cget("size") + step))
+        self.detail_font.configure(size=size)
+
     def _export_all(self):
         if not self.filtered:
             messagebox.showinfo("Export", "Nothing to export.")
             return
         path = filedialog.asksaveasfilename(
             title="Export contacts",
+            initialdir=self._dialog_dir(),
             defaultextension=".vcf",
             filetypes=[("vCard", "*.vcf")],
             initialfile="contacts.vcf")
@@ -632,6 +713,7 @@ class MainWindow:
         except OSError as exc:
             messagebox.showerror("Export failed", str(exc))
             return
+        self._remember_dir(path)
         self._set_status(f"Exported {len(self.filtered)} contacts")
 
     def _export_selected(self):
@@ -640,6 +722,7 @@ class MainWindow:
             return
         path = filedialog.asksaveasfilename(
             title="Export contact",
+            initialdir=self._dialog_dir(),
             defaultextension=".vcf",
             filetypes=[("vCard", "*.vcf")],
             initialfile=f"{self.selected.display_name or 'contact'}.vcf")
@@ -650,6 +733,7 @@ class MainWindow:
         except OSError as exc:
             messagebox.showerror("Export failed", str(exc))
             return
+        self._remember_dir(path)
         self._set_status(f"Exported {self.selected.display_name}")
 
     def _copy_details(self):
@@ -658,6 +742,13 @@ class MainWindow:
         self.root.clipboard_clear()
         self.root.clipboard_append(self.selected.to_text())
         self._set_status(f"Copied {self.selected.display_name}")
+
+    def _copy_vcard(self):
+        if self.selected is None:
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(self.selected.raw + "\n")
+        self._set_status(f"Copied vCard for {self.selected.display_name}")
 
     def _copy_value(self, value):
         self.root.clipboard_clear()

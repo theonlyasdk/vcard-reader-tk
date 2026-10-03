@@ -23,6 +23,7 @@ class Contact:
     urls: list = field(default_factory=list)
     birthday: str = ""
     note: str = ""
+    version: str = ""
     raw: str = ""
     source: str = ""
 
@@ -32,6 +33,8 @@ class Contact:
         parts += [v for _, v in self.emails]
         parts += [v for _, v in self.addresses]
         parts += self.urls
+        parts += [label for label, _ in
+                  self.phones + self.emails + self.addresses if label]
         return "\n".join(parts).lower()
 
     def subtitle(self) -> str:
@@ -271,7 +274,11 @@ def _build_contact(lines: list, source: str = "") -> Contact | None:
         name, params, value = _parse_line(line)
         if name is None:
             continue
-        if name in ("BEGIN", "END", "VERSION", "PRODID", "REV", "UID", "CLASS",
+        if name == "VERSION":
+            if not contact.version:
+                contact.version = value
+            continue
+        if name in ("BEGIN", "END", "PRODID", "REV", "UID", "CLASS",
                     "PHOTO", "LOGO", "KEY", "SOUND", "AGENT"):
             continue
         has_prop = True

@@ -13,6 +13,8 @@ TYPE_FILTERS = (
 SORT_OPTIONS = (
     "Name A–Z",
     "Name Z–A",
+    "First name",
+    "Last name",
     "Organisation",
     "Email",
 )
@@ -39,6 +41,12 @@ def sort_contacts(contacts: list, sort: str = "Name A–Z") -> list:
     """Return contacts in the requested order (input untouched)."""
     if sort == "Name Z–A":
         return sorted(contacts, key=lambda c: c.display_name.lower(), reverse=True)
+    if sort == "First name":
+        return sorted(contacts, key=lambda c: (
+            not c.first_name, c.first_name.lower(), c.display_name.lower()))
+    if sort == "Last name":
+        return sorted(contacts, key=lambda c: (
+            not c.last_name, c.last_name.lower(), c.display_name.lower()))
     if sort == "Organisation":
         return sorted(contacts,
                       key=lambda c: (c.organisation.lower(), c.display_name.lower()))

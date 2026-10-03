@@ -142,6 +142,10 @@ class TestQuotedPrintable(unittest.TestCase):
         self.assertEqual(c.display_name, "Hans M\u00fcller")
         self.assertEqual(c.last_name, "M\u00fcller")
 
+    def test_version_parsed(self):
+        (c,) = parse_vcards(card("VERSION:3.0", "FN:V", "TEL:1"))
+        self.assertEqual(c.version, "3.0")
+
     def test_qp_plain_ascii_untouched(self):
         (c,) = parse_vcards(card("VERSION:3.0", "FN:Plain", "TEL:1"))
         self.assertEqual(c.display_name, "Plain")
