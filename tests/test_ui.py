@@ -226,6 +226,23 @@ class TestMainWindow(unittest.TestCase):
         self.messagebox.showerror.assert_not_called()
         self.messagebox.showinfo.assert_not_called()
 
+    def test_drag_near_edges_scrolls(self):
+        cards = "".join(
+            f"BEGIN:VCARD\nVERSION:3.0\nFN:Person {i:02d}\nTEL:{i}\nEND:VCARD\n"
+            for i in range(60))
+        self.app.load_file(self._write_vcf("many.vcf", cards))
+        self.app.root.geometry("+32000+32000")
+        self.app.root.deiconify()
+        self.app.root.update()
+        self.assertEqual(self.app.tree.yview()[0], 0.0)
+        self.app._on_list_drag(SimpleNamespace(y=10 ** 6))
+        self.app._cancel_drag_scroll()
+        scrolled = self.app.tree.yview()[0]
+        self.assertGreater(scrolled, 0.0)
+        self.app._on_list_drag(SimpleNamespace(y=-10 ** 6))
+        self.app._cancel_drag_scroll()
+        self.assertLess(self.app.tree.yview()[0], scrolled)
+
     def test_export_all(self):
         out = self._write_vcf("out-all.vcf", "")
         self.filedialog.asksaveasfilename.return_value = out

@@ -45,6 +45,7 @@ class MainWindow:
         self.type_var = tk.StringVar(value=TYPE_FILTERS[0])
         self.sort_var = tk.StringVar(value=SORT_OPTIONS[0])
         self._search_after = None
+        self._drag_scroll_job = None
 
         self._create_menu()
         self._create_toolbar()
@@ -203,6 +204,7 @@ class MainWindow:
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
         self.tree.bind("<Button-3>", self._on_list_right_click)
         self.tree.bind("<B1-Motion>", self._on_list_drag)
+        self.tree.bind("<ButtonRelease-1>", self._cancel_drag_scroll)
         self.tree.tag_configure("stripe", background="#f0f4f8")
 
         right = ttk.Frame(paned, padding=(12, 4, 4, 0))
@@ -435,6 +437,39 @@ class MainWindow:
         row = self.tree.identify_row(event.y)
         if row and row not in self.tree.selection():
             self._select_iid(row)
+        self._drag_autoscroll(event)
+
+    def _cancel_drag_scroll(self, _event=None):
+        job, self._drag_scroll_job = self._drag_scroll_job, None
+        if job is not None:
+            try:
+                self.tree.after_cancel(job)
+            except Exception:
+                pass
+
+    def _drag_autoscroll(self, event=None):
+        self._cancel_drag_scroll()
+        if event is None:
+            try:
+                y = self.tree.winfo_pointery() - self.tree.winfo_rooty()
+            except Exception:
+                return
+        else:
+            y = event.y
+        height = self.tree.winfo_height()
+        margin = 24
+        if y < margin:
+            delta = -1
+        elif y > height - margin:
+            delta = 1
+        else:
+            return
+        self.tree.yview_scroll(delta, "units")
+        row = self.tree.identify_row(y)
+        if row and row not in self.tree.selection():
+            self._select_iid(row)
+        # Pointer held in the zone: keep scrolling until release.
+        self._drag_scroll_job = self.tree.after(50, self._drag_autoscroll)
 
     def _on_list_right_click(self, event):
         row = self.tree.identify_row(event.y)
