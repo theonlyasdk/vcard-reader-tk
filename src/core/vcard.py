@@ -173,6 +173,9 @@ def _strip_tel_uri(value: str) -> str:
 
 def parse_vcards(text: str, source: str = "") -> list:
     """Parse vCard text into a list of Contact."""
+    # NUL bytes survive file decoding but poison native strings downstream
+    # (Tcl/Tk C APIs); they carry no vCard meaning, so drop them up front.
+    text = text.replace("\x00", "")
     # Unfold: lines starting with space/tab continue the previous line.
     logical = []
     for raw_line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):

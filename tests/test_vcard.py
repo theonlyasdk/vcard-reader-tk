@@ -99,6 +99,10 @@ class TestUnfoldingAndEscapes(unittest.TestCase):
             "TEL:1"))
         self.assertEqual(c.display_name, "A;B,C\\D")
 
+    def test_nul_bytes_stripped(self):
+        (c,) = parse_vcards("BEGIN:VCARD\nVERSION:3.0\nFN:Nu\x00l\nTEL:1\nEND:VCARD\n")
+        self.assertEqual(c.display_name, "Nul")
+
     def test_escaped_newline_in_note(self):
         (c,) = parse_vcards(card("VERSION:3.0", "FN:F", r"NOTE:line1\nline2", "TEL:1"))
         self.assertEqual(c.note, "line1\nline2")

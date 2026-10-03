@@ -262,17 +262,20 @@ class MainWindow:
     # ----- data -----
 
     def _on_drop(self, paths):
-        files = []
-        for path in paths:
-            if Path(path).is_dir():
-                files.extend(str(p) for p in sorted(Path(path).glob("*.vcf")))
-                files.extend(str(p) for p in sorted(Path(path).glob("*.vcard")))
-            elif Path(path).suffix.lower() in (".vcf", ".vcard"):
-                files.append(path)
-        if files:
-            self.load_files(files)
-        elif paths:
-            self._set_status("Drop ignored: no .vcf files")
+        try:
+            files = []
+            for path in paths:
+                if Path(path).is_dir():
+                    files.extend(str(p) for p in sorted(Path(path).glob("*.vcf")))
+                    files.extend(str(p) for p in sorted(Path(path).glob("*.vcard")))
+                elif Path(path).suffix.lower() in (".vcf", ".vcard"):
+                    files.append(path)
+            if files:
+                self.load_files(files)
+            elif paths:
+                self._set_status("Drop ignored: no .vcf files")
+        except Exception as exc:
+            self._set_status(f"Drop failed: {exc}")
 
     def _open_dialog(self):
         paths = filedialog.askopenfilenames(

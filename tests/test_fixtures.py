@@ -41,6 +41,14 @@ class TestFixtures(unittest.TestCase):
         self.assertEqual(bob.display_name, "Bob NoDetails")
         self.assertEqual(bob.phones, [])
 
+    def test_nasty_file_parses_without_raising(self):
+        contacts = parse_file(DATA / "nasty.vcf")
+        names = [c.display_name for c in contacts]
+        self.assertIn("Nasty One", names)
+        self.assertIn("Survivor", names)
+        for contact in contacts:
+            self.assertNotIn("\x00", contact.display_name + contact.note)
+
     def test_v40_uri_values_and_groups(self):
         (c,) = parse_file(DATA / "vcard40.vcf")
         self.assertEqual(c.display_name, "John Doe")

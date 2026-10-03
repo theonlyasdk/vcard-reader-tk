@@ -169,10 +169,17 @@ class _FileDropTarget:
     def _handle_drop(self, wparam, lparam):
         hdrop = _as_handle(wparam)
         try:
-            point = self._drop_point(hdrop)
-            if point is not None and self._hits_widget(*point):
-                paths = self._dropped_paths(hdrop)
-            else:
+            try:
+                point = self._drop_point(hdrop)
+                if point is not None and self._hits_widget(*point):
+                    paths = self._dropped_paths(hdrop)
+                else:
+                    paths = []
+            except Exception:
+                # Never let native dispatch see a Python exception: on a
+                # windowed build there is no console, and an escaping
+                # exception inside a window procedure can take down the app.
+                traceback.print_exc()
                 paths = []
         finally:
             # The handle must be released whether or not the drop was ours.
@@ -186,7 +193,10 @@ class _FileDropTarget:
     def _window_proc(self, hwnd, msg, wparam, lparam):
         """Window procedure: swallow WM_DROPFILES, pass everything else to Tk."""
         if msg == WM_DROPFILES:
-            self._handle_drop(wparam, lparam)
+            try:
+                self._handle_drop(wparam, lparam)
+            except Exception:
+                traceback.print_exc()
             return 0
         return self._user32.CallWindowProcW(self._old_proc, hwnd, msg, wparam, lparam)
 
