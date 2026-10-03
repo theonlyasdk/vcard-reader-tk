@@ -5,7 +5,13 @@ import webbrowser
 from tkinter import filedialog, font, messagebox, ttk
 from pathlib import Path
 
-from core import TYPE_FILTERS, SORT_OPTIONS, filter_contacts, parse_file, sort_contacts
+from core import (
+    TYPE_FILTERS,
+    SORT_OPTIONS,
+    filter_contacts,
+    parse_file_with_issues,
+    sort_contacts,
+)
 from .dpi import setup_window_dpi
 from .file_drop import enable_file_drop
 
@@ -289,12 +295,15 @@ class MainWindow:
 
     def load_files(self, paths):
         paths = [str(p) for p in paths]
-        contacts, failed = [], []
+        contacts, failed, problems = [], [], []
         for path in paths:
             try:
-                contacts.extend(parse_file(path))
+                file_contacts, file_issues = parse_file_with_issues(path)
             except OSError:
                 failed.append(Path(path).name)
+                continue
+            contacts.extend(file_contacts)
+            problems.extend(file_issues)
         if failed:
             messagebox.showerror("Open failed",
                                  "Could not read:\n" + "\n".join(failed))
@@ -304,6 +313,28 @@ class MainWindow:
         self.current_files = paths
         self.selected = None
         self.apply_filter()
+        if not failed and problems:
+            loaded = len(contacts)
+            intro = (f"Loaded {loaded} contact(s), but found "
+                     f"{len(problems)} problem(s):" if contacts else
+                     "No usable contacts found. Problems:")
+            messagebox.showerror("Problems in vCard file",
+                                 intro + "\n\n" + self._format_problems(problems))
+        elif not failed and not contacts:
+            messagebox.showinfo(
+                "No contacts",
+                f"No vCards found in {self._source_label() or 'file'}.\n\n"
+                "A contact needs BEGIN:VCARD … END:VCARD lines around it.")
+
+    def _format_problems(self, problems):
+        lines = []
+        for issue in problems[:12]:
+            where = Path(issue.source).name if issue.source else "file"
+            lines.append(f"{where} line {issue.line}: {issue.problem}\n"
+                         f"Fix: {issue.fix}")
+        if len(problems) > 12:
+            lines.append(f"…and {len(problems) - 12} more.")
+        return "\n\n".join(lines)
 
     def _reload(self):
         if self.current_files:
@@ -613,6 +644,12 @@ class MainWindow:
             "vCard Reader\nSimple .vcf viewer built with tkinter.\n\nBy theonlyasdk")
 
     def _on_closing(self):
+        target = getattr(self.root, "_file_drop_target", None)
+        if target is not None:
+            try:
+                target.close()
+            except Exception:
+                pass
         try:
             if self._search_after is not None:
                 self.root.after_cancel(self._search_after)

@@ -6,10 +6,13 @@ can never block on a popup.
 
 import tkinter as tk
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 from ui.main_window import MainWindow
+
+DATA = Path(__file__).resolve().parent / "data"
 
 VCF = """\
 BEGIN:VCARD
@@ -208,6 +211,20 @@ class TestMainWindow(unittest.TestCase):
                 fresh.root.destroy()
             except tk.TclError:
                 pass
+
+    def test_nasty_file_reports_problems(self):
+        self.app.load_file(str(DATA / "nasty.vcf"))
+        self.assertTrue(self.messagebox.showerror.called)
+        _args, kwargs = self.messagebox.showerror.call_args
+        text = (_args[1] if len(_args) > 1 else "") + str(kwargs)
+        self.assertIn("line", text)
+        self.assertIn("Fix:", text)
+        names = self.rows()
+        self.assertIn("Survivor", names)
+
+    def test_clean_file_reports_nothing(self):
+        self.messagebox.showerror.assert_not_called()
+        self.messagebox.showinfo.assert_not_called()
 
     def test_export_all(self):
         out = self._write_vcf("out-all.vcf", "")

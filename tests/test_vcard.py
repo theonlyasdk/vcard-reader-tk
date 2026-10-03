@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from core import parse_file, parse_vcards
+from core import parse_file, parse_vcards, parse_with_diagnostics
 
 
 def card(*lines):
@@ -62,7 +62,31 @@ class TestParseBasics(unittest.TestCase):
     def test_empty_and_unterminated(self):
         self.assertEqual(parse_vcards(""), [])
         self.assertEqual(parse_vcards("FN:lonely\n"), [])
-        self.assertEqual(parse_vcards("BEGIN:VCARD\nFN:no end\n"), [])
+        contacts, issues = parse_with_diagnostics("BEGIN:VCARD\nFN:no end\n")
+        self.assertEqual([c.display_name for c in contacts], ["no end"])
+        self.assertEqual(len(issues), 1)
+        self.assertIn("END:VCARD", issues[0].fix)
+
+    def test_diagnostics_outside_text_and_stray_end(self):
+        text = "hello\nEND:VCARD\n" + card("VERSION:3.0", "FN:D", "TEL:1")
+        contacts, issues = parse_with_diagnostics(text)
+        self.assertEqual([c.display_name for c in contacts], ["D"])
+        self.assertEqual([i.line for i in issues], [1, 2])
+        self.assertTrue(all(i.fix for i in issues))
+
+    def test_diagnostics_missing_colon(self):
+        contacts, issues = parse_with_diagnostics(
+            card("VERSION:3.0", "FN:E", "TEL"))
+        self.assertEqual([c.display_name for c in contacts], ["E"])
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0].line, 4)
+        self.assertIn("':'", issues[0].problem)
+
+    def test_diagnostics_clean_file(self):
+        contacts, issues = parse_with_diagnostics(
+            card("VERSION:3.0", "FN:F", "TEL:1"))
+        self.assertEqual(len(contacts), 1)
+        self.assertEqual(issues, [])
 
     def test_crlf_and_cr_line_endings(self):
         text = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:CRLF\r\nTEL:1\r\nEND:VCARD\r\n"

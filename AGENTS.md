@@ -33,7 +33,8 @@ A tkinter GUI vCard (.vcf) reader. Non-production software.
 
   vcard_reader.py -> entry point. Only it puts src/ on sys.path.
   src/core/ -> non-UI logic: vcard.py (stdlib-only vCard 2.1/3.0/4.0 parser
-               incl. quoted-printable, Contact dataclass, parse_file / parse_vcards),
+               incl. quoted-printable and NUL stripping, Contact dataclass,
+               parse_file / parse_vcards, Issue diagnostics),
                query.py (pure filter_contacts / sort_contacts).
   src/ui/ -> tkinter widgets; main_window.py (two-pane list + details,
              search, filter/sort dropdowns, right-click menu, drag-select,

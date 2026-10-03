@@ -70,11 +70,22 @@ class TestFileDrop(unittest.TestCase):
 
     def test_drop_inside_window_fires(self):
         self._send_drop(["C:\\tmp\\a.vcf", "C:\\tmp\\b.vcf"], *self._center())
+        self._drain_poll()
         self.assertEqual(self.got, ["C:\\tmp\\a.vcf", "C:\\tmp\\b.vcf"])
 
     def test_drop_outside_window_ignored(self):
         self._send_drop(["C:\\tmp\\a.vcf"], 0, 0)
+        self._drain_poll()
         self.assertEqual(self.got, [])
+
+    def _drain_poll(self):
+        # Delivery now goes through a 100 ms event-loop poll, not after(0).
+        import time
+        deadline = time.time() + 5
+        while not self.got and time.time() < deadline:
+            time.sleep(0.15)
+            self.root.update()
+        self.root.update()
 
 
 if __name__ == "__main__":

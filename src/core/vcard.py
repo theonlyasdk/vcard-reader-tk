@@ -61,6 +61,15 @@ class Contact:
         return "\n".join(lines)
 
 
+@dataclass
+class Issue:
+    """One problem found while parsing, with a fix hint for the user."""
+    source: str = ""
+    line: int = 0
+    problem: str = ""
+    fix: str = ""
+
+
 def _unescape(value: str) -> str:
     out = []
     i = 0
@@ -171,35 +180,87 @@ def _strip_tel_uri(value: str) -> str:
     return value
 
 
-def parse_vcards(text: str, source: str = "") -> list:
-    """Parse vCard text into a list of Contact."""
+def _logical_lines(text: str) -> list:
+    """Fold-aware split: returns [(start_lineno, logical_line)]."""
+    out = []
+    for lineno, raw_line in enumerate(
+            text.replace("\r\n", "\n").replace("\r", "\n").split("\n"), start=1):
+        if raw_line[:1] in (" ", "\t") and out:
+            prev_no, prev_text = out[-1]
+            out[-1] = (prev_no, prev_text + raw_line[1:])
+        else:
+            out.append((lineno, raw_line))
+    return out
+
+
+def parse_with_diagnostics(text: str, source: str = "") -> tuple:
+    """Parse vCard text, returning (contacts, issues).
+
+    Issues are Issue entries with 1-based line numbers plus a fix hint,
+    for files that are malformed but still (partly) readable.
+    """
     # NUL bytes survive file decoding but poison native strings downstream
     # (Tcl/Tk C APIs); they carry no vCard meaning, so drop them up front.
     text = text.replace("\x00", "")
-    # Unfold: lines starting with space/tab continue the previous line.
-    logical = []
-    for raw_line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
-        if raw_line[:1] in (" ", "\t") and logical:
-            logical[-1] += raw_line[1:]
-        else:
-            logical.append(raw_line)
 
     contacts: list = []
+    issues: list = []
     current: list = []
     inside = False
-    for line in logical:
-        if line.strip().upper() == "BEGIN:VCARD":
-            inside = True
-            current = [line]
-        elif line.strip().upper() == "END:VCARD" and inside:
-            current.append(line)
-            contact = _build_contact(current, source)
+    start = 0
+
+    def flush():
+        if current:
+            contact = _build_contact([line for _, line in current], source)
             if contact is not None:
                 contacts.append(contact)
-            inside = False
-            current = []
-        elif inside:
-            current.append(line)
+
+    for lineno, line in _logical_lines(text):
+        upper = line.strip().upper()
+        if upper == "BEGIN:VCARD":
+            if inside:
+                issues.append(Issue(
+                    source, lineno,
+                    "BEGIN:VCARD opens a new card before the previous one was closed",
+                    "Close each contact with END:VCARD on its own line."))
+                flush()
+            inside, start, current = True, lineno, [(lineno, line)]
+        elif upper == "END:VCARD":
+            if not inside:
+                issues.append(Issue(
+                    source, lineno,
+                    "END:VCARD has no matching BEGIN:VCARD",
+                    "Remove this line, or add the missing BEGIN:VCARD above the contact."))
+            else:
+                current.append((lineno, line))
+                flush()
+                inside, current = False, []
+        elif not inside:
+            if line.strip():
+                issues.append(Issue(
+                    source, lineno,
+                    "Text outside any vCard is ignored",
+                    "Wrap each contact in BEGIN:VCARD … END:VCARD lines."))
+        else:
+            current.append((lineno, line))
+            name, _, _ = _parse_line(line)
+            if name is None and line.strip():
+                issues.append(Issue(
+                    source, lineno,
+                    "Property line has no ':' between name and value",
+                    "Write it as NAME:value, e.g. TEL:+1-555-0100."))
+    if inside:
+        issues.append(Issue(
+            source, start,
+            "Card opened here was never closed with END:VCARD",
+            "Add END:VCARD on its own line at the end of the contact."))
+        flush()
+    return contacts, issues
+
+
+def parse_vcards(text: str, source: str = "") -> list:
+    """Parse vCard text into a list of Contact."""
+    contacts, _ = parse_with_diagnostics(text, source)
     return contacts
 
 
@@ -269,11 +330,20 @@ def _build_contact(lines: list, source: str = "") -> Contact | None:
 
 def parse_file(path: str | Path) -> list:
     """Read a .vcf file, trying common encodings."""
+    contacts, _ = parse_file_with_issues(path)
+    return contacts
+
+
+def parse_file_with_issues(path: str | Path) -> tuple:
+    """Read a .vcf file, returning (contacts, issues)."""
     path = Path(path)
     data = path.read_bytes()
     for encoding in ("utf-8-sig", "utf-8", "utf-16", "cp1252"):
         try:
-            return parse_vcards(data.decode(encoding), source=str(path))
+            text = data.decode(encoding)
+            break
         except (UnicodeDecodeError, UnicodeError):
             continue
-    return parse_vcards(data.decode("utf-8", errors="replace"), source=str(path))
+    else:
+        text = data.decode("utf-8", errors="replace")
+    return parse_with_diagnostics(text, source=str(path))

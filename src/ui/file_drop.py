@@ -101,8 +101,16 @@ class _FileDropTarget:
         self._shell32 = shell32
         self._user32 = user32
         self._kernel32 = kernel32
+        self._set_long = set_long
         self._widget = widget
         self._on_paths = on_paths
+        self._closed = False
+        # Drops are queued here by the window procedure (native context) and
+        # processed by _poll in normal event-loop context. The native callback
+        # must never call into Tcl: running Tcl commands from inside window
+        # message dispatch corrupts the interpreter state (fatal
+        # PyEval_RestoreThread errors under tkinter).
+        self._pending = []
 
         self._hwnd = _window_handle(widget)
         self._old_proc = get_long(self._hwnd, GWL_WNDPROC)
@@ -111,6 +119,43 @@ class _FileDropTarget:
         self._proc = _WNDPROC(self._window_proc)
         shell32.DragAcceptFiles(self._hwnd, True)
         set_long(self._hwnd, GWL_WNDPROC, ctypes.cast(self._proc, ctypes.c_void_p).value)
+        self._schedule_poll()
+
+    def close(self):
+        """Stop accepting drops and restore the original window procedure.
+
+        Call before destroying the window: once Tk tears down, routing any
+        further message through Python code is fatal.
+        """
+        self._closed = True
+        try:
+            self._shell32.DragAcceptFiles(self._hwnd, False)
+        except Exception:
+            pass
+        pending, self._pending = self._pending, []
+        for hdrop in pending:
+            try:
+                self._shell32.DragFinish(hdrop)
+            except Exception:
+                pass
+        try:
+            self._set_long(self._hwnd, GWL_WNDPROC, self._old_proc)
+        except Exception:
+            traceback.print_exc()
+
+    def _schedule_poll(self):
+        try:
+            self._widget.after(100, self._poll)
+        except Exception:
+            pass
+
+    def _poll(self):
+        if self._closed:
+            return
+        pending, self._pending = self._pending, []
+        for hdrop in pending:
+            self._process_dropped(hdrop)
+        self._schedule_poll()
 
     def _hits_widget(self, x, y):
         """Whether a screen point falls inside the target widget."""
@@ -167,7 +212,16 @@ class _FileDropTarget:
         return point.x, point.y
 
     def _handle_drop(self, wparam, lparam):
-        hdrop = _as_handle(wparam)
+        # Native context: queue the raw handle, touch nothing else. The
+        # handle stays valid until DragFinish, which _poll performs after
+        # reading the paths in event-loop context.
+        try:
+            if not self._closed:
+                self._pending.append(_as_handle(wparam))
+        except Exception:
+            traceback.print_exc()
+
+    def _process_dropped(self, hdrop):
         try:
             try:
                 point = self._drop_point(hdrop)
@@ -176,19 +230,19 @@ class _FileDropTarget:
                 else:
                     paths = []
             except Exception:
-                # Never let native dispatch see a Python exception: on a
-                # windowed build there is no console, and an escaping
-                # exception inside a window procedure can take down the app.
                 traceback.print_exc()
                 paths = []
         finally:
-            # The handle must be released whether or not the drop was ours.
-            self._shell32.DragFinish(hdrop)
+            try:
+                self._shell32.DragFinish(hdrop)
+            except Exception:
+                pass
         if not paths:
             return
-        # Hand off to the event loop: loading files inside a window procedure
-        # would block the UI thread inside native dispatch.
-        self._widget.after(0, lambda: self._on_paths(paths))
+        try:
+            self._on_paths(paths)
+        except Exception:
+            traceback.print_exc()
 
     def _window_proc(self, hwnd, msg, wparam, lparam):
         """Window procedure: swallow WM_DROPFILES, pass everything else to Tk."""
