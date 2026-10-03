@@ -4,6 +4,7 @@ import tkinter as tk
 import webbrowser
 from tkinter import filedialog, font, messagebox, ttk
 from pathlib import Path
+import shutil
 
 from core import (
     MAX_RECENT,
@@ -14,6 +15,7 @@ from core import (
     parse_file_with_issues,
     save_state,
     sort_contacts,
+    state_path,
 )
 from .dpi import setup_window_dpi
 from .file_drop import enable_file_drop
@@ -329,6 +331,17 @@ class MainWindow:
         for path in recent:
             menu.add_command(label=path,
                              command=lambda p=path: self.load_files([p]))
+        menu.add_separator()
+        menu.add_command(label="Clear recents", command=self._clear_recent)
+
+    def _clear_recent(self):
+        self._save_state([], self.state.get("last_dir", ""))
+        settings = state_path().parent
+        # Only ever remove our own settings dir; never ASDK itself or above.
+        if settings.name == "vcard-reader-tk" and settings.parent.name == "ASDK":
+            shutil.rmtree(settings, ignore_errors=True)
+        self._rebuild_recent()
+        self._set_status("Recents cleared")
 
     def _open_dialog(self):
         paths = filedialog.askopenfilenames(

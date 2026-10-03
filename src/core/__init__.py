@@ -1,7 +1,7 @@
 """Core vCard logic (no UI)."""
 
 from .query import SORT_OPTIONS, TYPE_FILTERS, filter_contacts, sort_contacts
-from .state import MAX_RECENT, load_state, save_state
+from .state import MAX_RECENT, load_state, save_state, state_path
 from .vcard import (
     Contact,
     Issue,
@@ -25,4 +25,5 @@ __all__ = [
     "parse_with_diagnostics",
     "save_state",
     "sort_contacts",
+    "state_path",
 ]

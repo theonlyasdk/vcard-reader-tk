@@ -290,12 +290,27 @@ class TestMainWindow(unittest.TestCase):
         self.assertIn("vCard 3.0", details)
         self.assertIn("vcard30.vcf", details)
 
+    def menu_labels(self, menu):
+        return [menu.entrycget(i, "label")
+                for i in range(menu.index(tk.END) + 1)
+                if menu.type(i) != "separator"]
     def test_recent_menu_updated_on_load(self):
-        menu = self.app.recent_menu
-        names = [menu.entrycget(i, "label")
-                 for i in range(menu.index(tk.END) + 1)]
+        names = self.menu_labels(self.app.recent_menu)
         self.assertTrue(any("in.vcf" in label for label in names))
         self.assertTrue(any(Path(label).is_absolute() for label in names))
+
+    def test_clear_recents(self):
+        import os
+        from pathlib import Path as _Path
+        state_file = _Path(os.environ["VCARD_READER_STATE"])
+        self.assertTrue(state_file.is_file())
+        self.assertIn("Clear recents", self.menu_labels(self.app.recent_menu))
+        self.app._clear_recent()
+        self.assertEqual(self.app.state.get("recent"), [])
+        self.assertEqual(self.menu_labels(self.app.recent_menu), ["(Empty)"])
+        self.assertIn("cleared", self.app.status_left.cget("text").lower())
+        # Guard: temp settings dir outside ASDK must survive.
+        self.assertTrue(state_file.parent.is_dir())
 
     def test_export_all(self):
         out = self._write_vcf("out-all.vcf", "")
