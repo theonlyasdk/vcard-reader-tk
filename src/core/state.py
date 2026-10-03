@@ -16,7 +16,7 @@ MAX_RECENT = 5
 def _default_path() -> Path:
     if os.name == "nt":
         base = Path(os.environ.get("APPDATA", "~")).expanduser()
-        return base / "ASDK" / "vcard-reader-tk" / "state"
+        return base / "ASDK" / "vcard-reader-tk" / "state.json"
     base = Path(os.environ.get("XDG_CONFIG_HOME", "~/.config")).expanduser()
     return base / "vcard-reader-tk" / "state.json"
 

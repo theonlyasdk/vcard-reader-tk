@@ -31,7 +31,7 @@ class TestState(unittest.TestCase):
         with mock.patch("os.name", "nt"):
             with mock.patch.dict(os.environ, env, clear=True):
                 path = state_path()
-        self.assertEqual(path, Path("C:\\Users\\T\\ASDK\\vcard-reader-tk\\state"))
+        self.assertEqual(path, Path("C:\\Users\\T\\ASDK\\vcard-reader-tk\\state.json"))
 
     def test_missing_file_gives_defaults(self):
         self.assertEqual(load_state(), {"recent": [], "last_dir": ""})
