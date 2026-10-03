@@ -1,0 +1,13 @@
+BEGIN:VCARD
+VERSION:4.0
+N:Doe;John;;;
+FN:John Doe
+TEL;TYPE=cell;VALUE=uri:tel:+1-555-0199
+TEL;TYPE=home;VALUE=uri:tel:+1-555-0188
+EMAIL;TYPE=work;PREF=1:john.doe@example.com
+item1.TEL:+1-555-0177
+item1.X-ABLABEL:Pager
+ADR;TYPE=home:;;1 Infinite Loop;Cupertino;CA;95014;USA
+URL:https://johndoe.example.net
+NOTE:4.0 contact with grouped properties.
+END:VCARD
