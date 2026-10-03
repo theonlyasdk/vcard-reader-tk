@@ -295,6 +295,7 @@ class TestMainWindow(unittest.TestCase):
         names = [menu.entrycget(i, "label")
                  for i in range(menu.index(tk.END) + 1)]
         self.assertTrue(any("in.vcf" in label for label in names))
+        self.assertTrue(any(Path(label).is_absolute() for label in names))
 
     def test_export_all(self):
         out = self._write_vcf("out-all.vcf", "")

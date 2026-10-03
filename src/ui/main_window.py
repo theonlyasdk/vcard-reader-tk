@@ -327,7 +327,7 @@ class MainWindow:
             menu.add_command(label="(Empty)", state=tk.DISABLED)
             return
         for path in recent:
-            menu.add_command(label=Path(path).name,
+            menu.add_command(label=path,
                              command=lambda p=path: self.load_files([p]))
 
     def _open_dialog(self):
