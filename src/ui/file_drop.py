@@ -26,11 +26,8 @@ _WNDPROC = ctypes.WINFUNCTYPE(
 )
 
 
-def _point_from_lparam(lparam):
-    """Screen coordinates carried by the WM_DROPFILES lparam, as signed shorts."""
-    x = ctypes.c_short(lparam & 0xFFFF).value
-    y = ctypes.c_short((lparam >> 16) & 0xFFFF).value
-    return x, y
+class _POINT(ctypes.Structure):
+    _fields_ = (("x", wintypes.LONG), ("y", wintypes.LONG))
 
 
 def _window_handle(widget):
@@ -90,6 +87,8 @@ class _FileDropTarget:
         shell32.DragQueryFileA.argtypes = (
             wintypes.HANDLE, ctypes.c_uint, ctypes.c_char_p, ctypes.c_uint)
         shell32.DragQueryFileA.restype = ctypes.c_uint
+        shell32.DragQueryPoint.argtypes = (wintypes.HANDLE, ctypes.POINTER(_POINT))
+        shell32.DragQueryPoint.restype = wintypes.BOOL
         kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
         kernel32.GlobalLock.argtypes = (wintypes.HANDLE,)
         kernel32.GlobalLock.restype = ctypes.c_void_p
@@ -156,13 +155,28 @@ class _FileDropTarget:
                 paths.append(decode(buffer.value))
         return paths
 
+    def _drop_point(self, hdrop):
+        """Screen position of the drop, via DragQueryPoint.
+
+        WM_DROPFILES carries no coordinates in lParam (it is always 0);
+        the point lives in the DROPFILES struct itself.
+        """
+        point = _POINT()
+        if not self._shell32.DragQueryPoint(hdrop, ctypes.byref(point)):
+            return None
+        return point.x, point.y
+
     def _handle_drop(self, wparam, lparam):
         hdrop = _as_handle(wparam)
-        paths = []
-        if self._hits_widget(*_point_from_lparam(lparam)):
-            paths = self._dropped_paths(hdrop)
-        # The handle must be released whether or not the drop was ours.
-        self._shell32.DragFinish(hdrop)
+        try:
+            point = self._drop_point(hdrop)
+            if point is not None and self._hits_widget(*point):
+                paths = self._dropped_paths(hdrop)
+            else:
+                paths = []
+        finally:
+            # The handle must be released whether or not the drop was ours.
+            self._shell32.DragFinish(hdrop)
         if not paths:
             return
         # Hand off to the event loop: loading files inside a window procedure

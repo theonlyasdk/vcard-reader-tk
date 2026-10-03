@@ -82,6 +82,7 @@ class MainWindow:
 
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="File", menu=file_menu)
+        self.file_menu = file_menu
         file_menu.add_command(label="Open…", accelerator="Ctrl+O", command=self._open_dialog)
         file_menu.add_command(label="Reload", accelerator="F5", command=self._reload)
         file_menu.add_command(label="Export selected…", accelerator="Ctrl+S",
@@ -92,6 +93,7 @@ class MainWindow:
 
         edit_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Edit", menu=edit_menu)
+        self.edit_menu = edit_menu
         edit_menu.add_command(label="Copy details", accelerator="Ctrl+C",
                               command=self._copy_details)
         edit_menu.add_command(label="Copy phone", command=self._copy_phone)
@@ -129,11 +131,16 @@ class MainWindow:
     def _create_toolbar(self):
         bar = ttk.Frame(self.root, padding=(8, 6, 8, 2))
         bar.pack(side=tk.TOP, fill=tk.X)
+        buttons = {}
         for label, command in (("Open", self._open_dialog),
                                ("Reload", self._reload),
                                ("Export", self._export_selected),
                                ("Copy", self._copy_details)):
-            ttk.Button(bar, text=label, command=command).pack(side=tk.LEFT, padx=(0, 6))
+            buttons[label] = ttk.Button(bar, text=label, command=command)
+            buttons[label].pack(side=tk.LEFT, padx=(0, 6))
+        self.reload_btn = buttons["Reload"]
+        self.export_btn = buttons["Export"]
+        self.copy_btn = buttons["Copy"]
 
     # ----- body -----
 
@@ -350,8 +357,25 @@ class MainWindow:
             self.selected = None
             self._show_empty()
             self._set_status(right="")
+            self._update_action_states()
         else:
             self._select_iid(keep)
+
+    def _update_action_states(self):
+        has_file = bool(self.current_files)
+        has_selection = self.selected is not None
+        reload_state = tk.NORMAL if has_file else tk.DISABLED
+        sel_state = tk.NORMAL if has_selection else tk.DISABLED
+        self.reload_btn.config(state=reload_state)
+        self.export_btn.config(state=sel_state)
+        self.copy_btn.config(state=sel_state)
+        self.file_menu.entryconfig("Reload", state=reload_state)
+        self.file_menu.entryconfig("Export selected…", state=sel_state)
+        self.file_menu.entryconfig(
+            "Export all…", state=tk.NORMAL if self.filtered else tk.DISABLED)
+        self.edit_menu.entryconfig("Copy details", state=sel_state)
+        self.edit_menu.entryconfig("Copy phone", state=sel_state)
+        self.edit_menu.entryconfig("Copy email", state=sel_state)
 
     def _on_select(self, _event=None):
         selection = self.tree.selection()
@@ -363,6 +387,7 @@ class MainWindow:
                 self.selected = contact
                 self._show_details(contact)
                 self._set_status(right=contact.display_name)
+                self._update_action_states()
                 return
 
     def _select_iid(self, iid):
@@ -580,7 +605,9 @@ class MainWindow:
             self.root.clipboard_append(self.selected.emails[0][1])
 
     def _show_about(self):
-        messagebox.showinfo("About", "vCard Reader\nSimple .vcf viewer built with tkinter.")
+        messagebox.showinfo(
+            "About",
+            "vCard Reader\nSimple .vcf viewer built with tkinter.\n\nBy theonlyasdk")
 
     def _on_closing(self):
         try:

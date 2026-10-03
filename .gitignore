@@ -3,6 +3,7 @@ __pycache__/
 *$py.class
 build/
 dist/
+*.spec
 *.egg-info/
 .venv/
 venv/

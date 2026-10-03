@@ -178,6 +178,37 @@ class TestMainWindow(unittest.TestCase):
         self.assertEqual(self.rows(), before)
         self.assertIn("no .vcf", self.app.status_left.cget("text"))
 
+    def test_action_states_follow_selection(self):
+        for btn in (self.app.reload_btn, self.app.export_btn, self.app.copy_btn):
+            self.assertNotIn("disabled", btn.state())
+        self.app.search_var.set("no-such-person")
+        self.app.apply_filter()
+        self.assertNotIn("disabled", self.app.reload_btn.state())
+        self.assertIn("disabled", self.app.export_btn.state())
+        self.assertIn("disabled", self.app.copy_btn.state())
+        self.assertEqual(self.app.file_menu.entrycget("Reload", "state"), "normal")
+        self.assertEqual(
+            self.app.edit_menu.entrycget("Copy details", "state"), "disabled")
+
+    def test_action_states_disabled_without_file(self):
+        try:
+            fresh = MainWindow()
+        except tk.TclError as exc:
+            self.skipTest(f"no display: {exc}")
+        try:
+            fresh.root.withdraw()
+            for btn in (fresh.reload_btn, fresh.export_btn, fresh.copy_btn):
+                self.assertIn("disabled", btn.state())
+            self.assertEqual(fresh.file_menu.entrycget("Reload", "state"),
+                             "disabled")
+            self.assertEqual(fresh.edit_menu.entrycget("Copy details", "state"),
+                             "disabled")
+        finally:
+            try:
+                fresh.root.destroy()
+            except tk.TclError:
+                pass
+
     def test_export_all(self):
         out = self._write_vcf("out-all.vcf", "")
         self.filedialog.asksaveasfilename.return_value = out

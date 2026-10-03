@@ -40,7 +40,8 @@ A tkinter GUI vCard (.vcf) reader. Non-production software.
              click-to-copy details, multi-file open, Explorer drag-drop,
              menu bar, status bar), dpi.py, file_drop.py (WM_DROPFILES).
   tests/ -> stdlib unittest: test_vcard.py, test_query.py, test_ui.py,
-             test_fixtures.py (version fixtures in tests/data/).
+             test_fixtures.py (version fixtures in tests/data/),
+             test_filedrop.py (synthetic WM_DROPFILES).
              Run with: python -m unittest discover.
   requirements.txt -> lists only tkinter. There are no third-party dependencies.
 
